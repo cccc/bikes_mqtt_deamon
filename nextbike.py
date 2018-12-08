@@ -97,7 +97,7 @@ class nextbike:
                 self.client.reconnect()
                 z=False
             except Exception as msg:
-                print(F"Something went wrong while reconnecting! {str(msg)}")
+                print("Something went wrong while reconnecting! %s" % str(msg))
                 
 
     def send_update(self):
@@ -135,7 +135,7 @@ class nextbike:
             self._roadsCache[coord] = address["road"] if "road" in address else None
             return self._roadsCache[coord]
         except Exception as msg:
-            print(F"Something went wrong resolving location for {str(coord)}! {str(msg)}")
+            print("Something went wrong resolving location for %s! %s" % (str(coord),str(msg)))
             return
     
 nextbike().start()
