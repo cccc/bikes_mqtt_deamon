@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import os
 import urllib
 import configparser
 import json
@@ -69,16 +68,16 @@ class LoopThread(threading.Thread):
             time.sleep(self.interval)
 
 class nextbike:
-    def __init__(self):
+    def __init__(self,configfile):
         self.config = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation())
-        self.config.read(os.path.dirname(__file__)+"/nextbike.cfg")
+        self.config.read()
         self._init_mqtt()
         self.loop_thread = LoopThread(self.send_update,int(self.config["service"]["interval"]))
         self._roadsCache = CacheDictionary()
         self.geocoder = Nominatim(user_agent="nbMQTT")
         
     def _init_mqtt(self):
-        self.client = mqtt.Client("bikes/nextbike")
+        self.client = mqtt.Client(self.config["server"]["id"])
         self.client.on_connect = self._on_connect
         self.client.on_disconnect = self._on_disconnect
     
@@ -89,16 +88,6 @@ class nextbike:
     
     def _on_connect(self, client, userdata, flags, rc):
         print("Connected with result code " +str(rc))
-    
-    def _on_disconnect(self, a, b, c, d):
-        z = True
-        while z:
-            try:
-                self.client.reconnect()
-                z=False
-            except Exception as msg:
-                print("Something went wrong while reconnecting! %s" % str(msg))
-                
 
     def send_update(self):
         try:
@@ -137,5 +126,7 @@ class nextbike:
         except Exception as msg:
             print("Something went wrong resolving location for %s! %s" % (str(coord),str(msg)))
             return
-    
-nextbike().start()
+
+if __name__ == "__main__":
+    import os
+    nextbike(os.path.dirname(__file__)+"/nextbike.cfg").start()
