@@ -121,7 +121,7 @@ class nextbike:
             #print(F"Sending package with {len(bikes)} entries")
             self.client.publish(self.config["service"]["topic"], json.dumps({"time":strftime("%d.%m. %H:%M:%S", localtime()),"bikes":bikes}), retain=True)
         except Exception as msg:
-            print(F"Something went wrong! {str(msg)}")
+            print("Something went wrong! %s" % str(msg))
 
     def getRoad(self, coord):
         try:
