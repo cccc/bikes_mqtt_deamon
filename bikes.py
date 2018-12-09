@@ -79,7 +79,6 @@ class nextbike:
     def _init_mqtt(self):
         self.client = mqtt.Client(self.config["server"]["id"])
         self.client.on_connect = self._on_connect
-        self.client.on_disconnect = self._on_disconnect
     
     def start(self):
         self.client.connect(self.config["server"]["host"], int(self.config["server"]["port"]), int(self.config["server"]["keepalive"]))
