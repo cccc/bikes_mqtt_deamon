@@ -129,4 +129,4 @@ class nextbike:
 
 if __name__ == "__main__":
     import os
-    nextbike(os.path.dirname(__file__)+"/nextbike.cfg").start()
+    nextbike(os.path.dirname(__file__)+"/bikes.cfg").start()
