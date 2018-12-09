@@ -70,7 +70,7 @@ class LoopThread(threading.Thread):
 class nextbike:
     def __init__(self,configfile):
         self.config = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation())
-        self.config.read()
+        self.config.read(configfile)
         self._init_mqtt()
         self.loop_thread = LoopThread(self.send_update,int(self.config["service"]["interval"]))
         self._roadsCache = CacheDictionary()
