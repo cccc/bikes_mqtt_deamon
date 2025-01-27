@@ -13,101 +13,138 @@ from geopy.geocoders import Nominatim
 
 config = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation())
 
+
 class CacheDictionary:
     def __init__(self):
         self.dictionary = dict()
         self.retain = []
-    
+
     def keys(self):
         return self.dictionary.keys()
-    
+
     def refresh(self):
         for key in list(self.dictionary.keys()):
             if key not in self.retain:
                 del self.dictionary[key]
         self.retain.clear()
-    
-    def find(predicate,cache=True):
+
+    def find(self, predicate):
         for key in self.dictionary:
             value = self.dictionary[key]
-            if predicate(key,value):
+            if predicate(key, value):
                 self.retain.append(key)
-                return key, value, True # third value True to be able to check None, None case
-    
+                return (
+                    key,
+                    value,
+                    True,
+                )  # third value True to be able to check None, None case
+
     def __contains__(self, key):
         return key in self.dictionary
-    
+
     def __setitem__(self, key, value):
         if key not in self.retain:
             self.retain.append(key)
-        self.dictionary[key]=value
-    
+        self.dictionary[key] = value
+
     def __getitem__(self, key):
         if key not in self.retain:
             self.retain.append(key)
         return self.dictionary[key]
-    
+
     def __delitem__(self, key):
         if key in self.retain:
             self.retain.remove(key)
         del self.dictionary[key]
-    
+
     def __iter__(self):
         return iter(self.dictionary)
 
 
 class LoopThread(threading.Thread):
-    def __init__(self, func, interval=60):
+    def __init__(self, func, interval=500):
         super().__init__()
         self.func = func
         self.interval = interval
-    
+
     def run(self):
         while True:
             self.func()
             time.sleep(self.interval)
 
+
 class nextbike:
-    def __init__(self,configfile):
-        self.config = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation())
+    def __init__(self, configfile):
+        self.config = configparser.ConfigParser(
+            interpolation=configparser.ExtendedInterpolation()
+        )
         self.config.read(configfile)
         self._init_mqtt()
-        self.loop_thread = LoopThread(self.send_update,int(self.config["service"]["interval"]))
+        self.loop_thread = LoopThread(
+            self.send_update, int(self.config["service"]["interval"])
+        )
         self._roadsCache = CacheDictionary()
         self.geocoder = Nominatim(user_agent="nbMQTT")
-        
+
     def _init_mqtt(self):
         self.client = mqtt.Client(self.config["server"]["id"])
         self.client.on_connect = self._on_connect
-    
+
     def start(self):
-        self.client.connect(self.config["server"]["host"], int(self.config["server"]["port"]), int(self.config["server"]["keepalive"]))
+        self.client.connect(
+            self.config["server"]["host"],
+            int(self.config["server"]["port"]),
+            int(self.config["server"]["keepalive"]),
+        )
         self.client.loop_start()
         self.loop_thread.start()
-    
+
     def _on_connect(self, client, userdata, flags, rc):
-        print("Connected with result code " +str(rc))
+        print("Connected with result code " + str(rc))
 
     def send_update(self):
         try:
-            response = json.loads(urllib.request.urlopen(self.config["service"]["request"]).read().decode("utf-8"))
-            bikes = [
-                {
-                    "bike_number" : bike_number,
-                    "lat" : place["lat"],
-                    "lng" : place["lng"],
-                    "address" : place["address"] or self.getRoad((place["lat"],place["lng"])),
-                    "name" : place["name"],
-                    "distance" : distance((self.config["service"]["lat"],self.config["service"]["lng"]), (place["lat"],place["lng"])).meters
-                }
-                for country in response["countries"]
-                for city in country["cities"]
-                for place in city["places"] if place["bikes"]>0
-                for bike_number in place["bike_numbers"]
-            ] if ("countries" in response) else []
+            req = urllib.request.Request(self.config["service"]["request"])
+            req.add_header(
+                "User-Agent",
+                "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:97.0) Gecko/20100101 Firefox/97.0",
+            )
+            response = json.loads(urllib.request.urlopen(req).read().decode("utf-8"))
+            bikes = (
+                [
+                    {
+                        "bike_number": bike_number,
+                        "lat": place["lat"],
+                        "lng": place["lng"],
+                        "address": place["address"]
+                        or self.getRoad((place["lat"], place["lng"])),
+                        "name": place["name"],
+                        "distance": distance(
+                            (
+                                self.config["service"]["lat"],
+                                self.config["service"]["lng"],
+                            ),
+                            (place["lat"], place["lng"]),
+                        ).meters,
+                    }
+                    for country in response["countries"]
+                    for city in country["cities"]
+                    for place in city["places"]
+                    if place["bikes"] > 0
+                    for bike_number in place["bike_numbers"]
+                ]
+                if ("countries" in response)
+                else []
+            )
             self._roadsCache.refresh()
-            #print(F"Sending package with {len(bikes)} entries")
-            self.client.publish(self.config["service"]["topic"], json.dumps({"time":strftime("%d.%m. %H:%M:%S", localtime()),"bikes":bikes}), retain=True)
+            # print(F"Sending package with {len(bikes)} entries")
+            self.client.publish(
+                self.config["service"]["topic"],
+                json.dumps(
+                    {"time": strftime("%d.%m. %H:%M:%S", localtime()), "bikes": bikes}
+                ),
+                retain=True,
+            )
         except Exception as msg:
             print("Something went wrong! %s" % str(msg))
 
@@ -116,16 +153,24 @@ class nextbike:
             if coord in self._roadsCache:
                 return self._roadsCache[coord]
             for cachedCoord in self._roadsCache:
-                if distance(coord,cachedCoord).meters <= int(self.config["service"]["road_cache_distance"]):
+                if distance(coord, cachedCoord).meters <= int(
+                    self.config["service"]["road_cache_distance"]
+                ):
                     if self._roadsCache.dictionary[cachedCoord] is not None:
                         return self._roadsCache[cachedCoord]
-            address=self.geocoder.reverse(coord).raw["address"]
-            self._roadsCache[coord] = address["road"] if "road" in address else None
+            address = self.geocoder.reverse(coord, timeout=None).raw["address"]["road"]
+
+            self._roadsCache[coord] = address
             return self._roadsCache[coord]
         except Exception as msg:
-            print("Something went wrong resolving location for %s! %s" % (str(coord),str(msg)))
+            print(
+                "Something went wrong resolving location for %s! %s"
+                % (str(coord), str(msg))
+            )
             return
+
 
 if __name__ == "__main__":
     import os
-    nextbike(os.path.dirname(__file__)+"/bikes.cfg").start()
+
+    nextbike(os.path.dirname(__file__) + "/bikes.cfg").start()
